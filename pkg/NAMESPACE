@@ -1,0 +1,10 @@
+export(truncreg)
+S3method(fitted,truncreg)
+S3method(residuals,truncreg)
+S3method(coef,truncreg)
+S3method(vcov,truncreg)
+S3method(logLik,truncreg)
+S3method(print,truncreg)
+S3method(summary,truncreg)
+S3method(print,summary.truncreg)
+
