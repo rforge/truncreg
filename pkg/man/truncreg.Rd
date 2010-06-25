@@ -71,7 +71,7 @@ truncreg(formula, data, subset, weights, na.action,
   and \code{\link[stats]{model.matrix}}.
 }
 
-\seealso{\code{\link[maxLik]{maxLik}}}
+\seealso{\code{\link[maxLik]{maxLik}}, \code{\link[mhurdle]{mhurdle}}}
 
 \references{
   Cragg JG (1971). Some Statistical Models for Limited Dependent Variables
@@ -142,6 +142,7 @@ tobit <- survreg(Surv(durable, durable > 0, type = "left") ~ age + quant,
   data = tobin, dist = "gaussian")
 
 ## Two-part model (Cragg 1971)
+## (see "mhurdle" package for a combined solution)
 cragg_probit <- glm(factor(durable > 0) ~ age + quant,
   data = tobin, family = binomial(link = "logit"))
 cragg_trunc <- truncreg(durable ~ age + quant, data = tobin, subset = durable > 0)
