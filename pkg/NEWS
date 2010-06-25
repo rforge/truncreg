@@ -1,0 +1,13 @@
+Changes in Version 0.2-0
+
+  o Added/improved support for standard extractor methods:
+    logLik(), model.matrix(), model.frame(), terms(), predict().
+  
+  o Extended information provided in "truncreg" objects to
+    support methods above, e.g., the terms and number of
+    observations are now conveniently accessible, model/y/x
+    are optionally available.
+    
+  o Added internal check that the response is actually truncated
+    and an error is thrown if not.
+  

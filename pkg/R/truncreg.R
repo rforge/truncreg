@@ -38,7 +38,9 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
   lnL
 }
 
-truncreg <- function(formula, data, subset, weights, na.action, point = 0, direction = "left", ...){
+truncreg <- function(formula, data, subset, weights, na.action, point = 0, direction = "left",
+  model = TRUE, y = FALSE, x = FALSE, ...)
+{
   formula.type <- TRUE
   if (class(formula[[3]]) == "name"){
     X <- try(eval(formula[[3]],sys.frame(which=-3)),silent = TRUE)
@@ -56,18 +58,33 @@ truncreg <- function(formula, data, subset, weights, na.action, point = 0, direc
     mf[[1L]] <- as.name("model.frame")
     mf <- eval(mf, parent.frame())
     X <- model.matrix(formula, data = mf)
-    y <- model.response(mf)
+    Y <- model.response(mf)
+    mt <- attr(mf, "terms")
   }
   else{
-    y <- eval(formula[[2]],sys.frame(which=-3))
+    Y <- eval(formula[[2]], sys.frame(which=-3))
+    mt <- terms(formula)
   }
-  result <- truncreg.fit(X, y, point, direction, ...)
-  result$model <- mf
+  
+  ## process options
+  direction <- match.arg(direction, c("left", "right"))
+  point <- rep(point, length.out = length(Y))
+  
+  result <- truncreg.fit(X, Y, point, direction, ...)
   result$call <- cl
+  result$terms <- mt
+  if(model) result$model <- mf
+  if(y) result$y <- Y
+  if(x) result$x <- X
   result
 }
 
-truncreg.fit <- function(X, y, point, direction, ...){
+truncreg.fit <- function(X, y, point, direction, ...)
+{
+  ## check input
+  if(direction == "left" & any(y < point)) stop("response not truncated, contains observations < 'point'")
+  if(direction == "right" & any(y > point)) stop("response not truncated, contains observations > 'point'")
+
   dots <- list(...)
   if (is.null(dots$method)) method <- "nr" else method <- dots$method
   if (is.null(dots$iterlim)) iterlim <- 50 else iterlim <- dots$iterlim
@@ -94,8 +111,8 @@ truncreg.fit <- function(X, y, point, direction, ...){
                      direction = direction),"hessian")
   } 
 
-  linmod <- lm(y~X-1)
-  start <- c(coef(linmod),summary(linmod)$sigma)
+  linmod <- lm.fit(X, y)
+  start <- c(linmod$coefficients, sqrt(sum(linmod$residuals^2)/linmod$df.residual))
   maxl <- maxLik(f, g, h, start = start, method = method,
                  iterlim = iterlim, print.level = print.level)
   grad.conv <- g(maxl$estimate)
@@ -104,7 +121,8 @@ truncreg.fit <- function(X, y, point, direction, ...){
   fit <- attr(ml.truncreg(coefficients, X = X, y = y,
                           gradient = FALSE, hessian = FALSE,
                           fit = TRUE, point = point,
-                          direction = direction),"fit")
+                          direction = direction), "fit")
+  names(fit) <- rownames(X)
   logLik <- maxl$maximum
   attr(logLik,"df") <- length(coefficients)
   hessian <- maxl$hessian
@@ -128,11 +146,17 @@ truncreg.fit <- function(X, y, point, direction, ...){
                  fitted.values = fit,
                  logLik = logLik,
                  gradient = grad.conv,
-                 model = NULL,
+		 nobs = length(y),
                  call = NULL,
+		 terms = NULL,
+                 model = NULL,
+		 y = NULL,
+		 x = NULL,
+		 point = if(isTRUE(all.equal(rep(point[1], length(point)), point))) point[1] else point,
+		 direction = direction,
                  est.stat = est.stat
                  )
-  class(result) <- c("truncreg","maxLik")
+  class(result) <- c("truncreg", "maxLik")
   result
 }
 
@@ -152,11 +176,8 @@ vcov.truncreg <- function(object, ...){
   object$vcov
 }
 
-logLik.truncreg <- function(object, ...){
-  x <- object$logLik
-  attr(x,"df") <- NULL
-  x
-}
+logLik.truncreg <- function(object, ...)
+  structure(object$logLik, df = length(object$coefficients), nobs = object$nobs, class = "logLik")
 
 print.truncreg <- function (x, digits = max(3, getOption("digits") - 2), width = getOption("width"), ...){
   cat("\nCall:\n", deparse(x$call), "\n\n", sep = "")
@@ -177,7 +198,7 @@ summary.truncreg <- function (object,...){
   p <- 2*(1-pnorm(abs(z)))
   CoefTable <- cbind(b,std.err,z,p)
   colnames(CoefTable) <- c("Estimate","Std. Error","t-value","Pr(>|t|)")
-  object$CoefTable <- CoefTable
+  object$coefficients <- CoefTable
   class(object) <- c("summary.truncreg","truncreg")
   return(object)
 }
@@ -187,11 +208,32 @@ print.summary.truncreg <- function(x,digits= max(3, getOption("digits") - 2),wid
   print(x$call)
   cat("\n")
   cat("\nCoefficients :\n")
-  printCoefmat(x$CoefTable,digits=digits)
+  printCoefmat(x$coefficients,digits=digits)
   cat("\n")
   df <- attr(x$logLik,"df")
   cat(paste("Log-Likelihood: ",
             signif(x$logLik,digits),
             " on ",df," Df\n",sep=""))
   invisible(x)
+}
+
+model.frame.truncreg <- function(formula, ...) {
+  if(!is.null(formula$model)) return(formula$model)
+  NextMethod()
+}
+
+model.matrix.truncreg <- function(object, ...)
+  if(!is.null(object$x)) object$x else model.matrix(object$terms, model.frame(object), ...)
+
+
+predict.truncreg <- function(object, newdata = NULL, na.action = na.pass, ...) 
+{
+  if(missing(newdata)) {
+    rval <- object$fitted.values
+  } else {
+    mt <- delete.response(object$terms)
+    X <- model.matrix(mt, model.frame(mt, newdata, na.action = na.action))
+    rval <- drop(X %*% head(object$coefficients, -1))
+  }
+  return(rval)
 }
