@@ -1,9 +1,9 @@
 Package: truncreg
-Version: 0.2-0
-Date: 2010-06-25
+Version: 0.2-1
+Date: 2013-12-24
 Title: Truncated Gaussian Regression Models
-Author: Yves Croissant, Achim Zeileis
-Maintainer: Yves Croissant <Yves.Croissant@univ-reunion.fr>
+Authors@R: c(person("Yves", "Croissant", role = c("aut", "cre"), email = "yves.croissant@univ-reunion.fr"),
+             person("Achim", "Zeileis", role = "aut", email = "Achim.Zeileis@R-project.org"))
 Depends: R (>= 1.8.0), maxLik
 Suggests: survival
 Description: Estimation of models for truncated Gaussian variables by maximum likelihood.

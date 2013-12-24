@@ -86,7 +86,7 @@ truncreg.fit <- function(X, y, point, direction, ...)
   if(direction == "right" & any(y > point)) stop("response not truncated, contains observations > 'point'")
 
   dots <- list(...)
-  if (is.null(dots$method)) method <- "nr" else method <- dots$method
+  if (is.null(dots$method)) method <- "bfgs" else method <- dots$method
   if (is.null(dots$iterlim)) iterlim <- 50 else iterlim <- dots$iterlim
   if (is.null(dots$print.level)) print.level <- 0 else print.level <- dots$print.level
   
