@@ -21,7 +21,7 @@
 \usage{
 truncreg(formula, data, subset, weights, na.action,
   point = 0, direction = "left",
-  model = TRUE, y = FALSE, x = FALSE, ...)
+  model = TRUE, y = FALSE, x = FALSE, scaled = FALSE, ...)
 }
 
 \arguments{
@@ -35,7 +35,8 @@ truncreg(formula, data, subset, weights, na.action,
   \item{direction}{the direction of the truncation, either \code{"left"}
     (the default) or \code{"right"},}
   \item{model, y, x}{logicals. If \code{TRUE} the corresponding components
-    of the fit (model frame, response, model matrix) are returned.}
+    of the fit (model frame, response, model matrix) are returned,}
+  \item{scaled}{if \code{TRUE}, scaled parameters (beta / sigma) are estimated,}
   \item{...}{further arguments.}
 }
 

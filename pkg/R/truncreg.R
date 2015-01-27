@@ -1,45 +1,65 @@
-ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FALSE, point, direction){
-  beta <- param[1:ncol(X)]
-  sigma <- param[length(param)]
-  bX <- as.numeric(crossprod(beta,t(X)))
-  resid <- y-bX
-  if (direction == "left"){
-    trunc <- bX-point
-    sgn <- 1
-  }
-  else{
-    trunc <- point-bX
-    sgn <- -1
-  }
-  mills <- dnorm(trunc/sigma)/pnorm(trunc/sigma)
-
-  lnL <- sum(log(dnorm(resid/sigma))-log(sigma)
-               -log(pnorm(trunc/sigma)))
-  if (gradient){
-    gbX <- resid/sigma^2 -sgn/sigma*mills
-    gsigma <- resid^2/sigma^3-1/sigma+trunc/sigma^2*mills
-    gradi <- cbind(gbX*X,as.numeric(gsigma))
-    attr(lnL,"gradient") <- gradi
-  }
-  if (fit){
-    attr(lnL,"fit") <- bX
-  }
-  if (hessian){
-    bb <- mills*(trunc/sigma+mills)/sigma^2-1/sigma^2
-    ss <- -3*resid^2/sigma^4+1/sigma^2+trunc^2/sigma^4*mills*(mills+trunc/sigma)-
-      2*trunc*mills/sigma^3
-    bs <- -2*resid/sigma^3+sgn*(mills/sigma^2-trunc/sigma^3*mills*(mills+trunc/sigma))
-    bb <- crossprod(bb*X,X)
-    bs <- apply(bs*X,2,sum)
-    ss <- sum(ss)
-    h <- rbind(cbind(bb,bs),c(bs,ss))
-    attr(lnL,"hessian") <- h
-  }
-  lnL
+ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FALSE, point, direction, scaled = FALSE){
+    beta <- param[1:ncol(X)]
+    sigma <- param[length(param)]
+    bX <- as.numeric(crossprod(beta, t(X)))
+    sgn <- ifelse(direction == "left", +1, -1)
+    if (!scaled){
+        resid <- (y - bX)
+        trunc <- (bX - point)
+        mills <- dnorm(sgn * trunc / sigma) / pnorm(sgn * trunc / sigma)
+        lnL <-  - log(sigma) + dnorm(resid / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE)
+        if (gradient){
+            gbX <- resid / sigma ^ 2 - sgn * mills / sigma
+            gsigma <- - 1 / sigma + resid ^ 2 / sigma ^ 3  + sgn * mills * trunc / sigma ^ 2
+            gradi <- cbind(gbX * X, as.numeric(gsigma))
+            attr(lnL, "gradient") <- gradi
+        }
+        if (fit){
+            attr(lnL, "fit") <- bX
+        }
+        if (hessian){
+            bb <- -1 / sigma ^ 2 + mills * (sgn * trunc / sigma + mills) / sigma ^ 2
+            ss <- 1 / sigma ^ 2 - 3 * resid ^ 2 / sigma ^ 4 - 2 * mills * sgn * trunc / sigma ^ 2 +
+                mills * (sgn * trunc / sigma + mills) * trunc / sigma ^ 3
+            bs <- - 2 * resid / sigma ^ 3 + sgn * mills / sigma ^ 2 -
+                mills * (mills + sgn * trunc / sigma) * trunc / sigma ^ 3
+            bb <- crossprod(bb * X, X)
+            bs <- apply(bs * X, 2, sum)
+            ss <- sum(ss)
+            h <- rbind(cbind(bb, bs), c(bs, ss))
+            attr(lnL,"hessian") <- h
+        }
+    }
+    else{
+        lnL <- - log(sigma) + dnorm(y / sigma - bX, log = TRUE) - pnorm(sgn * (bX - point / sigma), log.p = TRUE)
+        mills <- dnorm(sgn * (bX - point / sigma)) / pnorm(sgn * (bX - point / sigma))
+        if (gradient){
+            gbX <- (y / sigma - bX) - mills * sgn
+            gsigma <- - 1 / sigma + (y / sigma - bX) * y / sigma ^ 2 - sgn * mills / sigma ^ 2
+            gradi <- cbind(gbX * X, as.numeric(gsigma))
+            attr(lnL, "gradient") <- gradi
+        }
+        if (fit){
+            attr(lnL, "fit") <- bX * sigma
+        }
+        if(hessian){
+            bb <- -1 + mills * (mills + sgn * (bX - point / sigma))
+            bs <- - y / sigma ^ 2 + (mills + sgn * (bX - point / sigma)) * mills * point / sigma ^ 2
+            ss <- 1 / sigma ^ 2 - 3 * y ^ 2 / sigma ^ 4 + 2 * bX * y / sigma ^ 3 +
+                mills * (mills + sgn * (bX - point / sigma)) * point ^ 2 / sigma ^ 4 +
+                    2 * sgn * mills * point / sigma ^ 3
+            bb <- crossprod(bb * X, X)
+            bs <- apply(bs * X, 2, sum)
+            ss <- sum(ss)
+            h <- rbind(cbind(bb, bs), c(bs, ss))
+            attr(lnL,"hessian") <- h
+        }
+    }
+    lnL
 }
 
 truncreg <- function(formula, data, subset, weights, na.action, point = 0, direction = "left",
-  model = TRUE, y = FALSE, x = FALSE, ...)
+  model = TRUE, y = FALSE, x = FALSE, scaled = FALSE, ...)
 {
   formula.type <- TRUE
   if (class(formula[[3]]) == "name"){
@@ -70,7 +90,7 @@ truncreg <- function(formula, data, subset, weights, na.action, point = 0, direc
   direction <- match.arg(direction, c("left", "right"))
   point <- rep(point, length.out = length(Y))
   
-  result <- truncreg.fit(X, Y, point, direction, ...)
+  result <- truncreg.fit(X, Y, point, direction, scaled, ...)
   result$call <- cl
   result$terms <- mt
   if(model) result$model <- mf
@@ -79,7 +99,7 @@ truncreg <- function(formula, data, subset, weights, na.action, point = 0, direc
   result
 }
 
-truncreg.fit <- function(X, y, point, direction, ...)
+truncreg.fit <- function(X, y, point, direction, scaled, ...)
 {
   ## check input
   if(direction == "left" & any(y < point)) stop("response not truncated, contains observations < 'point'")
@@ -97,22 +117,40 @@ truncreg.fit <- function(X, y, point, direction, ...)
   f <- function(param)  ml.truncreg(param,  X = X, y = y,
                                     gradient = FALSE, hessian = FALSE,
                                     fit = FALSE, point = point,
-                                    direction = direction)
+                                    direction = direction, scaled = scaled)
   g <- function(param){
     attr(ml.truncreg(param, X = X, y = y,
                      gradient = TRUE, hessian = FALSE,
                      fit = FALSE, point = point,
-                     direction = direction),"gradient")
+                     direction = direction, scaled = scaled), "gradient")
   } 
   h <- function(param){
     attr(ml.truncreg(param, X = X, y = y,
                      gradient = FALSE, hessian = TRUE,
                      fit = FALSE, point = point,
-                     direction = direction),"hessian")
+                     direction = direction, scaled = scaled), "hessian")
   } 
 
   linmod <- lm.fit(X, y)
-  start <- c(linmod$coefficients, sqrt(sum(linmod$residuals^2)/linmod$df.residual))
+  start <- c(coef(linmod), sqrt(sum(linmod$residuals ^ 2) / linmod$df.residual))
+  if (scaled) start[1:ncol(X)] <- start[1:ncol(X)] / start[ncol(X) + 1]
+  if (TRUE){
+      f0 <-  ml.truncreg(start,  X = X, y = y,
+                       gradient = TRUE, hessian = FALSE,
+                       fit = FALSE, point = point, direction = direction, scaled = scaled)
+      agrad <- apply(attr(f0, "gradient"), 2, sum)
+      ostart <- start
+      of <- sum(f(start))
+      ngrad <- c()
+      eps <- 1E-5
+      for (i in 1:length(start)){
+          start <- ostart
+          start[i] <- start[i] + eps
+          ngrad <- c(ngrad, (sum(f(start)) - of) / eps)
+      }
+      print(cbind(agrad, ngrad))
+      start <- ostart
+  }
   maxl <- maxLik(f, g, h, start = start, method = method,
                  iterlim = iterlim, print.level = print.level)
   grad.conv <- g(maxl$estimate)
