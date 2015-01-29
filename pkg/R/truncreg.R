@@ -1,4 +1,4 @@
-ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FALSE, point, direction, scaled = FALSE){
+ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FALSE, point, direction, scaled){
     beta <- param[1:ncol(X)]
     sigma <- param[length(param)]
     bX <- as.numeric(crossprod(beta, t(X)))
@@ -14,13 +14,14 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
             gradi <- cbind(gbX * X, as.numeric(gsigma))
             attr(lnL, "gradient") <- gradi
         }
-        if (fit){
-            attr(lnL, "fit") <- bX
-        }
+        if (fit) attr(lnL, "fit") <- bX
         if (hessian){
             bb <- -1 / sigma ^ 2 + mills * (sgn * trunc / sigma + mills) / sigma ^ 2
-            ss <- 1 / sigma ^ 2 - 3 * resid ^ 2 / sigma ^ 4 - 2 * mills * sgn * trunc / sigma ^ 2 +
+            ss <- 1 / sigma ^ 2 - 3 * resid ^ 2 / sigma ^ 4 - 2 * mills * sgn * trunc / sigma ^ 3 +
                 mills * (sgn * trunc / sigma + mills) * trunc / sigma ^ 3
+            ss <- 1 / sigma ^ 2 - 3 * resid ^ 2 / sigma ^ 4 - 2 * mills * sgn * trunc / sigma ^ 3 +
+                mills * (sgn * trunc / sigma + mills) * trunc^2 / sigma ^ 4
+
             bs <- - 2 * resid / sigma ^ 3 + sgn * mills / sigma ^ 2 -
                 mills * (mills + sgn * trunc / sigma) * trunc / sigma ^ 3
             bb <- crossprod(bb * X, X)
@@ -35,13 +36,11 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
         mills <- dnorm(sgn * (bX - point / sigma)) / pnorm(sgn * (bX - point / sigma))
         if (gradient){
             gbX <- (y / sigma - bX) - mills * sgn
-            gsigma <- - 1 / sigma + (y / sigma - bX) * y / sigma ^ 2 - sgn * mills / sigma ^ 2
+            gsigma <- - 1 / sigma + (y / sigma - bX) * y / sigma ^ 2 - sgn * mills * point / sigma ^ 2
             gradi <- cbind(gbX * X, as.numeric(gsigma))
             attr(lnL, "gradient") <- gradi
         }
-        if (fit){
-            attr(lnL, "fit") <- bX * sigma
-        }
+        if (fit) attr(lnL, "fit") <- bX * sigma
         if(hessian){
             bb <- -1 + mills * (mills + sgn * (bX - point / sigma))
             bs <- - y / sigma ^ 2 + (mills + sgn * (bX - point / sigma)) * mills * point / sigma ^ 2
@@ -59,7 +58,7 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
 }
 
 truncreg <- function(formula, data, subset, weights, na.action, point = 0, direction = "left",
-  model = TRUE, y = FALSE, x = FALSE, scaled = FALSE, ...)
+  model = TRUE, y = FALSE, x = FALSE, scaled = TRUE, ...)
 {
   formula.type <- TRUE
   if (class(formula[[3]]) == "name"){
@@ -110,33 +109,20 @@ truncreg.fit <- function(X, y, point, direction, scaled, ...)
   if (is.null(dots$iterlim)) iterlim <- 50 else iterlim <- dots$iterlim
   if (is.null(dots$print.level)) print.level <- 0 else print.level <- dots$print.level
   
-  oldoptions <- options(warn=-1)
+  oldoptions <- options(warn = - 1)
   on.exit(options(oldoptions))
   start.time <- proc.time()
 
   f <- function(param)  ml.truncreg(param,  X = X, y = y,
-                                    gradient = FALSE, hessian = FALSE,
+                                    gradient = TRUE, hessian = TRUE,
                                     fit = FALSE, point = point,
                                     direction = direction, scaled = scaled)
-  g <- function(param){
-    attr(ml.truncreg(param, X = X, y = y,
-                     gradient = TRUE, hessian = FALSE,
-                     fit = FALSE, point = point,
-                     direction = direction, scaled = scaled), "gradient")
-  } 
-  h <- function(param){
-    attr(ml.truncreg(param, X = X, y = y,
-                     gradient = FALSE, hessian = TRUE,
-                     fit = FALSE, point = point,
-                     direction = direction, scaled = scaled), "hessian")
-  } 
-
-  linmod <- lm.fit(X, y)
-  start <- c(coef(linmod), sqrt(sum(linmod$residuals ^ 2) / linmod$df.residual))
+  linmod <- lm(y ~ X - 1)
+  start <- c(coef(linmod), summary(linmod)$sigma)
   if (scaled) start[1:ncol(X)] <- start[1:ncol(X)] / start[ncol(X) + 1]
-  if (TRUE){
+  if (FALSE){
       f0 <-  ml.truncreg(start,  X = X, y = y,
-                       gradient = TRUE, hessian = FALSE,
+                       gradient = TRUE, hessian = FLSE,
                        fit = FALSE, point = point, direction = direction, scaled = scaled)
       agrad <- apply(attr(f0, "gradient"), 2, sum)
       ostart <- start
@@ -148,18 +134,28 @@ truncreg.fit <- function(X, y, point, direction, scaled, ...)
           start[i] <- start[i] + eps
           ngrad <- c(ngrad, (sum(f(start)) - of) / eps)
       }
-      print(cbind(agrad, ngrad))
       start <- ostart
   }
-  maxl <- maxLik(f, g, h, start = start, method = method,
+  maxl <- maxLik(f, start = start, method = method,
                  iterlim = iterlim, print.level = print.level)
-  grad.conv <- g(maxl$estimate)
   coefficients <- maxl$estimate
-  vcov <- -solve(maxl$hessian)
+
+  if (scaled){
+      coefficients[1:ncol(X)] <- coefficients[1:ncol(X)] * coefficients[ncol(X) + 1]
+      f <- function(param)  ml.truncreg(param,  X = X, y = y,
+                                        gradient = TRUE, hessian = TRUE,
+                                        fit = FALSE, point = point,
+                                        direction = direction, scaled = FALSE)
+      maxl <- maxLik(f, start = coefficients, method = method,
+                     iterlim = 0, print.level = print.level)
+  }
+  coefficients <- maxl$estimate
+  grad.conv <- maxl$gradient
+  vcov <- - solve(maxl$hessian)
   fit <- attr(ml.truncreg(coefficients, X = X, y = y,
-                          gradient = FALSE, hessian = FALSE,
+                          gradient = TRUE, hessian = TRUE,
                           fit = TRUE, point = point,
-                          direction = direction), "fit")
+                          direction = direction, scaled = scaled), "fit")
   names(fit) <- rownames(X)
   logLik <- maxl$maximum
   attr(logLik,"df") <- length(coefficients)
@@ -244,6 +240,11 @@ summary.truncreg <- function (object,...){
 print.summary.truncreg <- function(x,digits= max(3, getOption("digits") - 2),width=getOption("width"),...){
   cat("\nCall:\n")
   print(x$call)
+  if (!is.null(x$est.stat)){
+      cat("\n")
+      print(x$est.stat)
+  }
+  
   cat("\n")
   cat("\nCoefficients :\n")
   printCoefmat(x$coefficients,digits=digits)
