@@ -6,7 +6,9 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
     if (!scaled){
         resid <- (y - bX)
         trunc <- (bX - point)
-        mills <- dnorm(sgn * trunc / sigma) / pnorm(sgn * trunc / sigma)
+        # Update of the mills function, use logs to avoid Inf
+        #mills <- dnorm(sgn * trunc / sigma) / pnorm(sgn * trunc / sigma)
+        mills <- exp(dnorm(sgm * trunc / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE))
         lnL <-  - log(sigma) + dnorm(resid / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE)
         if (gradient){
             gbX <- resid / sigma ^ 2 - sgn * mills / sigma
@@ -33,7 +35,9 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
     }
     else{
         lnL <- - log(sigma) + dnorm(y / sigma - bX, log = TRUE) - pnorm(sgn * (bX - point / sigma), log.p = TRUE)
-        mills <- dnorm(sgn * (bX - point / sigma)) / pnorm(sgn * (bX - point / sigma))
+        # Update of the mills function, use logs to avoid Inf (YC 2015/12/11)
+        # mills <- dnorm(sgn * (bX - point / sigma)) / pnorm(sgn * (bX - point / sigma))
+        mills <- exp(dnorm(sgn * (bX - point / sigma), log = TRUE) - pnorm(sgn * (bX - point / sigma), log.p = TRUE))
         if (gradient){
             gbX <- (y / sigma - bX) - mills * sgn
             gsigma <- - 1 / sigma + (y / sigma - bX) * y / sigma ^ 2 - sgn * mills * point / sigma ^ 2
