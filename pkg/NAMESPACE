@@ -1,5 +1,9 @@
 export("truncreg")
 import("maxLik")
+importFrom("stats", "coef", "delete.response", "dnorm", "fitted", "lm",
+           "model.frame", "model.matrix", "model.response", "na.pass",
+           "pnorm", "printCoefmat", "terms", "vcov")
+importFrom("utils", "head")
 S3method("coef", "truncreg")
 S3method("fitted", "truncreg")
 S3method("logLik", "truncreg")

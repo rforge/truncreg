@@ -1,5 +1,5 @@
 Package: truncreg
-Version: 0.2-3
+Version: 0.2-4
 Date: 2016-08-03
 Title: Truncated Gaussian Regression Models
 Authors@R: c(person("Yves", "Croissant", role = c("aut", "cre"), email = "yves.croissant@univ-reunion.fr"),
