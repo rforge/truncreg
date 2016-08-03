@@ -8,7 +8,7 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
         trunc <- (bX - point)
         # Update of the mills function, use logs to avoid Inf
         #mills <- dnorm(sgn * trunc / sigma) / pnorm(sgn * trunc / sigma)
-        mills <- exp(dnorm(sgm * trunc / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE))
+        mills <- exp(dnorm(sgn * trunc / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE))
         lnL <-  - log(sigma) + dnorm(resid / sigma, log = TRUE) - pnorm(sgn * trunc / sigma, log.p = TRUE)
         if (gradient){
             gbX <- resid / sigma ^ 2 - sgn * mills / sigma
@@ -62,7 +62,7 @@ ml.truncreg <- function(param, X, y, gradient = FALSE, hessian = FALSE, fit = FA
 }
 
 truncreg <- function(formula, data, subset, weights, na.action, point = 0, direction = "left",
-  model = TRUE, y = FALSE, x = FALSE, scaled = TRUE, ...)
+  model = TRUE, y = FALSE, x = FALSE, scaled = FALSE, ...)
 {
   formula.type <- TRUE
   if (class(formula[[3]]) == "name"){
@@ -184,6 +184,7 @@ truncreg.fit <- function(X, y, point, direction, scaled, ...)
                  fitted.values = fit,
                  logLik = logLik,
                  gradient = grad.conv,
+                 gradientObs = maxl$gradientObs,
 		 nobs = length(y),
                  call = NULL,
 		 terms = NULL,
@@ -279,4 +280,35 @@ predict.truncreg <- function(object, newdata = NULL, na.action = na.pass, ...)
     rval <- drop(X %*% head(object$coefficients, -1))
   }
   return(rval)
+}
+
+print.est.stat <- function(x, ...){
+  et <- x$elaps.time[3]
+  i <- x$nb.iter[1]
+  halton <- x$halton
+  method <- x$method
+  if (!is.null(x$type) && x$type != "simple"){
+    R <- x$nb.draws
+    cat(paste("Simulated maximum likelihood with", R, "draws\n"))
+  }
+  s <- round(et,0)
+  h <- s%/%3600
+  s <- s-3600*h
+  m <- s%/%60
+  s <- s-60*m
+  cat(paste(method, "method\n"))
+  tstr <- paste(h, "h:", m, "m:", s, "s", sep="")
+  cat(paste(i,"iterations,",tstr,"\n"))
+  if (!is.null(halton)) cat("Halton's sequences used\n")
+  if (!is.null(x$eps)) cat(paste("g'(-H)^-1g =", sprintf("%5.3G", as.numeric(x$eps)),"\n"))
+  if (is.numeric(x$code)){
+    msg <- switch(x$code,
+                  "1" = "gradient close to zero",
+                  "2" = "successive function values within tolerance limits",
+                  "3" = "last step couldn't find higher value",
+                  "4" = "iteration limit exceeded"
+                  )
+    cat(paste(msg, "\n"))
+  }
+  else cat(paste(x$code, "\n"))
 }

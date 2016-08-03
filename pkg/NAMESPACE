@@ -1,5 +1,5 @@
 export("truncreg")
-
+import("maxLik")
 S3method("coef", "truncreg")
 S3method("fitted", "truncreg")
 S3method("logLik", "truncreg")
