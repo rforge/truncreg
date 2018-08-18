@@ -72,7 +72,7 @@ truncreg(formula, data, subset, weights, na.action,
   and \code{\link[stats]{model.matrix}}.
 }
 
-\seealso{\code{\link[maxLik]{maxLik}}, \code{\link[mhurdle]{mhurdle}}}
+\seealso{\code{\link[maxLik]{maxLik}}, \code{mhurdle}}
 
 \references{
   Cragg JG (1971). Some Statistical Models for Limited Dependent Variables
